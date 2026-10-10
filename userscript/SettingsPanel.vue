@@ -72,7 +72,8 @@
           <label v-if="draft.service === services.newapi"><span>New API 地址</span><input v-model.trim="draft.newApiUrl" inputmode="url" /></label>
           <label v-if="draft.service === services.azureOpenai"><span>Azure 地址</span><input v-model.trim="draft.azureOpenaiEndpoint" inputmode="url" placeholder="https://your-resource.services.ai.azure.com/openai/v1/" /></label>
           <p v-if="draft.service === services.azureOpenai" class="hint">支持资源地址、v1 基础地址与完整 Chat Completions 地址；模型请填写 Azure 中的实际部署名称。</p>
-          <label v-if="usesProxy"><span>代理地址（可选）</span><input v-model.trim="draft.proxy[draft.service]" inputmode="url" placeholder="留空使用默认接口" /></label>
+          <label v-if="usesProxy"><span>{{ nativeResponses ? t('settings.services.responses.endpoint') : '代理地址（可选）' }}</span><input v-model.trim="draft.proxy[draft.service]" inputmode="url" :placeholder="nativeResponses ? urls[services.openaiResponses] : '留空使用默认接口'" /></label>
+          <p v-if="nativeResponses" class="hint">{{ t('settings.services.responses.endpointHelp') }}</p>
           <template v-if="draft.service === services.youdao">
             <label><span>有道 App Key</span><input v-model.trim="draft.youdaoAppKey" autocomplete="off" /></label>
             <label><span>有道 App Secret</span><input v-model.trim="draft.youdaoAppSecret" type="password" autocomplete="off" /></label>
@@ -148,8 +149,9 @@
 
         <details>
           <summary>高级 AI 请求设置</summary>
-          <label v-if="isAIService && usesModel" class="toggle"><span>当前模型 Thinking（仅在已适配接口生效，默认关闭）</span><input v-model="selectedModelThinking" type="checkbox" :disabled="!selectedServiceModel" aria-label="当前模型是否启用 Thinking" /></label>
-          <label><span>自定义请求体（JSON）</span><textarea v-model="draft.customBody[draft.service]" rows="4" placeholder="可选：合并到请求体顶层" /></label>
+          <label v-if="isAIService && usesModel && !nativeResponses" class="toggle"><span>当前模型 Thinking（仅在已适配接口生效，默认关闭）</span><input v-model="selectedModelThinking" type="checkbox" :disabled="!selectedServiceModel" aria-label="当前模型是否启用 Thinking" /></label>
+          <label><span>自定义请求体（JSON）</span><textarea v-model="draft.customBody[draft.service]" rows="4" :placeholder="nativeResponses ? responsesBodyExample : '可选：合并到请求体顶层'" /></label>
+          <p v-if="nativeResponses" class="hint">{{ t('settings.services.responses.bodyHelp') }}</p>
           <label><span>System 提示词</span><textarea v-model="draft.system_role[draft.service]" rows="4" /></label>
           <label><span>User 提示词</span><textarea v-model="draft.user_role[draft.service]" rows="5" /></label>
         </details>
@@ -178,6 +180,8 @@ import UiSelect from '@/src/ui/components/UiSelect.vue';
 import {ElOption} from 'element-plus';
 import {config as runtimeConfig, configReady, saveConfig} from '@/src/services/config/store';
 import {customModelString, models, options, resolveConfiguredModel, services, servicesType} from '@/src/core/config/catalog';
+import {urls} from '@/src/core/config/constants';
+import {useUiI18n} from '@/src/ui/i18n';
 import {supportsInputBoxTranslationPrompt} from '@/src/core/config/inputTranslation';
 import {
   getCustomOpenAIProvider,
@@ -208,6 +212,9 @@ const versionLabel = `FluentRead V${process.env.VUE_APP_VERSION} · Userscript V
 const iconUrl = globalThis.__FLUENTREAD_ICON_DATA__ || '';
 const menuContainer = ref<HTMLElement>();
 const draft = ref(new Config());
+const {t} = useUiI18n();
+const nativeResponses = computed(() => draft.value.service === services.openaiResponses);
+const responsesBodyExample = '{"reasoning":{"effort":"low"}}';
 const hydrated = ref(false);
 const fallbackLabel = (id: string) => FREE_TRANSLATION_PROVIDERS.find(item => item.id === id)?.label || id;
 const availableFallbacks = computed(() => FREE_TRANSLATION_PROVIDERS.filter(item => !draft.value.freeTranslationOrder.includes(item.id)));

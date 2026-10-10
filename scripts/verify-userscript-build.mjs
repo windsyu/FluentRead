@@ -12,7 +12,9 @@ const artifactBytes = Buffer.byteLength(source);
 // 相对 main 的 1,960,000 字节预算增加 4 KB，继续校验协议、体积和运行边界。
 // 智能高亮的共享偏好（快捷键、开关、配色与浓度的归一化）使脚本增至 1,964,630 字节；功能本身不进入脚本。
 // 为保持与扩展的配置导入导出兼容，预算再放宽 1 KB。
-const MAX_USERSCRIPT_BYTES = 1_965_000;
+// 独立 Responses 原生请求与 SSE 聚合，以及未发布语言的小型内嵌覆盖，使本轮实测为
+// 1,979,094 字节（约增加 14.5 KB，0.74%）。预算有界增加 15 KB，不改变其他协议/安全断言。
+const MAX_USERSCRIPT_BYTES = 1_980_000;
 const preludeStartMarker = '/* FluentRead userscript compatibility prelude:start */';
 const preludeEndMarker = '/* FluentRead userscript compatibility prelude:end */';
 const preludeStart = source.indexOf(preludeStartMarker);

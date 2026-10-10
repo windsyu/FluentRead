@@ -2,11 +2,12 @@
  * @file src/providers/translation/ai-sdk/errors.ts
  *
  * 文件职责：将 AI SDK 的 APICallError、RetryError 和未知异常归一为 FluentRead 可序列化的 LLM transport 错误。
- * 主要内容：定义 LlmTransportError 及诊断字段，隐藏 HTML 错误页并提示检查模型接口，限制和脱敏 provider detail，并由 normalizeAiSdkError 校准 kind 与 retryable。
+ * 主要内容：定义 LlmTransportError 及诊断字段，隐藏 HTML 错误页，Chat 提示检查模型接口，独立 Responses 不复用错误的 Chat 协议建议；限制和脱敏 provider detail，并由 normalizeAiSdkError 校准 kind 与 retryable。
  * 模块边界：本文件位于 provider 适配层，只把统一翻译请求转换为外部或浏览器服务协议；不管理页面 DOM、UI 生命周期或配置持久化，缓存、去重和超时总预算由 translation broker 统一协调。
  */
 
 import {APICallError, RetryError} from 'ai';
+import {services} from '@/src/core/config/catalog';
 import {formatServiceError} from '@/src/services/translation/serviceErrors';
 import type {TranslationErrorKind} from '@/src/services/translation/errors';
 
@@ -174,7 +175,9 @@ export function normalizeAiSdkError(
     const fromBody = parseResponseBody(candidate.responseBody);
     const detail = sanitizeProviderDetail(
       isHtmlResponse(candidate)
-        ? '服务返回了 HTML 网页。请检查 Base URL、接口路径，以及所选模型是否支持 Chat Completions。'
+        ? service === services.openaiResponses
+          ? '翻译服务返回了无法识别的错误'
+          : '服务返回了 HTML 网页。请检查 Base URL、接口路径，以及所选模型是否支持 Chat Completions。'
         : fromData.message || fromBody.message || candidate.message || '上游请求失败',
       apiKey,
     );

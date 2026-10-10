@@ -4,6 +4,7 @@ import {resolve} from 'node:path';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 // 脚本发布的语言资源不含智能高亮文案；摘要必须按脚本实际使用的投影计算。
 import {UI_LANGUAGE_BUNDLES} from '../userscript/languageBundles';
+import userscriptConfig from '../userscript/vite.config';
 
 const languageDir = resolve(process.cwd(), 'userscript/languages');
 const digest = createHash('sha256').update(JSON.stringify(UI_LANGUAGE_BUNDLES['fr-FR'])).digest('hex').slice(0, 16);
@@ -86,5 +87,45 @@ describe('userscript remote UI language data', () => {
             `https://cdn.jsdelivr.net/gh/FluentRead/FluentRead@${resourceCommit}/userscript/languages/${fileName}`,
             `https://raw.githubusercontent.com/FluentRead/FluentRead/${resourceCommit}/userscript/languages/${fileName}`,
         ]);
+    });
+
+    it('applies local unpublished copy after fetching or caching only the exact published remote catalog', async () => {
+        const defines = (userscriptConfig as {define: Record<string, string>}).define;
+        const files = JSON.parse(defines.__FLUENTREAD_USERSCRIPT_REMOTE_LANGUAGES__) as Record<string, string>;
+        const overrides = JSON.parse(defines.__FLUENTREAD_USERSCRIPT_LANGUAGE_OVERRIDES__) as Record<string, string>;
+        const commit = JSON.parse(defines.__FLUENTREAD_USERSCRIPT_RESOURCE_COMMIT__);
+        const publishedFile = files['fr-FR'];
+        const publishedSource = readFileSync(resolve(languageDir, publishedFile), 'utf8');
+        const published = JSON.parse(publishedSource);
+        const values = new Map<string, unknown>();
+        const requests: string[] = [];
+        globalThis.GM = {
+            async getValue(key, fallback) { return values.get(key) ?? fallback; },
+            async setValue(key, value) { values.set(key, value); },
+            xmlHttpRequest(details) {
+                requests.push(details.url);
+                return Promise.resolve({status: 200, statusText: 'OK', responseText: publishedSource});
+            },
+        };
+        vi.stubGlobal('__FLUENTREAD_USERSCRIPT_LANGUAGE_BUNDLES__', {});
+        vi.stubGlobal('__FLUENTREAD_USERSCRIPT_REMOTE_LANGUAGES__', files);
+        vi.stubGlobal('__FLUENTREAD_USERSCRIPT_LANGUAGE_OVERRIDES__', overrides);
+        vi.stubGlobal('__FLUENTREAD_USERSCRIPT_RESOURCE_COMMIT__', commit);
+        const first = await import('@/userscript/uiLanguageBundles');
+        await expect(first.ensureUiLanguageBundle('fr-FR')).resolves.toBe(true);
+        const {translate} = await import('@/src/core/i18n');
+        const key = 'settings.services.responses.endpointHelp';
+        expect(translate(key, 'fr-FR')).toBe(UI_LANGUAGE_BUNDLES['fr-FR'].messages[key]);
+        expect(requests).toEqual([`https://cdn.jsdelivr.net/gh/FluentRead/FluentRead@${commit}/userscript/languages/${publishedFile}`]);
+        expect(JSON.parse(values.get(`fluentread:ui-language:${publishedFile}`) as string)).toEqual(published);
+        expect(published.messages).not.toHaveProperty(key);
+        vi.resetModules();
+        globalThis.GM.xmlHttpRequest = () => { throw new Error('offline'); };
+        const cached = await import('@/userscript/uiLanguageBundles');
+        await expect(cached.ensureUiLanguageBundle('fr-FR')).resolves.toBe(true);
+        const nextI18n = await import('@/src/core/i18n');
+        expect(nextI18n.translate(key, 'fr-FR')).toBe(UI_LANGUAGE_BUNDLES['fr-FR'].messages[key]);
+        expect(requests).toHaveLength(1);
+        expect(JSON.parse(values.get(`fluentread:ui-language:${publishedFile}`) as string)).toEqual(published);
     });
 });

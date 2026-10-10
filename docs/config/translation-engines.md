@@ -8,6 +8,16 @@ outline: false
 
 <GuideVisual kind="provider" />
 
+## 使用 openai responses
+
+在 **设置 → 翻译服务** 中选择 **openai responses**，填写 API Key 并选择模型，然后检查连接。这是独立的原生 Responses 翻译服务，原来的 OpenAI、New API 和自定义服务继续使用原来的协议，配置互不影响。
+
+**接口地址**留空时使用 `https://api.openai.com/v1/responses`。连接自建 New API 时可填写服务根地址（如 `https://your-server.example`）、版本地址（如 `https://your-server.example/v1`）或完整 `/responses` 地址。完整 `/chat/completions` 地址会转换为同前缀的 `/responses`；单数 `/response` 会提示修正。其他精确自定义路径按原样使用。
+
+请求固定使用 `stream: true` 和 `store: false`。扩展会收齐流式文本，再显示完整译文，不会逐字更新界面。`store: false` 是发送给服务的参数，不替代自建服务的数据政策。
+
+高级自定义请求体请填写 Responses 原生参数，例如 `reasoning`。`messages` 会报错；`temperature`、`max_output_tokens`、`max_tokens` 和 `max_completion_tokens` 会被移除；固定的 `stream` 和 `store` 不接受覆盖。无效 JSON 请求体会在发送前失败，不会被忽略后继续发送。该服务当前只接入文本翻译与连接检查，不提供阅读助手、写作助手或图片识别。
+
 ## 谷歌翻译的速度与失败回退
 
 谷歌翻译无需填写密钥。全文翻译会短暂合并同语言的段落，首次优先调用浏览器批量接口，随后根据近期成功率、响应耗时和当前负载自动调整四条接口的优先级。每隔 10 批实际请求探索一次较少使用的可用接口，以发现更快或恢复的线路，无需额外开启加速开关。

@@ -1,5 +1,9 @@
 {
   "messages": {
+    "settings.services.responses.endpoint": "Адрес API",
+    "settings.services.responses.endpointHelp": "Оставьте пустым для OpenAI. Для собственного New API укажите корневой URL, /v1 или полный URL /responses. Поток собирается перед показом полного перевода. Помощники чтения, письма и распознавание изображений не поддерживаются.",
+    "settings.services.responses.bodyHelp": "Используйте нативные поля Responses, например reasoning. messages отклоняется; temperature, max_output_tokens, max_tokens и max_completion_tokens удаляются. stream всегда true, store всегда false.",
+    "settings.services.responses.bodyError": "Введите корректный JSON-объект. Некорректное тело запроса не отправляется.",
     "options.panel.floatingBall": "Настройки плавающей кнопки",
     "settings.general.bilingualSentenceHighlightGroupingHint": "Если границы предложений различаются, соседние предложения выделяются вместе.",
     "learning.collection.moreActions": "Другие действия с сохранённым",

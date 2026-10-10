@@ -3,6 +3,7 @@
  *
  * 文件职责：维护 FluentRead 翻译语言、服务与模型的领域目录，让设置、校验和运行时能够引用同一组稳定的服务标识与模型元数据。
  * 主要内容：明确区分简体中文和繁体中文，统一源语言、目标语言和输入框语言选项，并定义 services、servicesType、服务目录展示分类与排序（含“云服务厂商”分组）、模型候选、云厂商地域白名单、MiniMax 与 MiMo 的计费和地域选项，并提供 resolveConfiguredModel、resolveCloudRegion 等解析函数，把“自定义模型”选择归一为可请求的模型编号。 同时维护默认翻译提示词与历史默认提示词清单，供配置归一化升级未被用户改写的旧默认值。 可核对的公开符号包括 services、cloudVendorServices、referenceAiPlatformServices、servicesType、customModelString、cloudRegionOptions、getDefaultCloudRegion、resolveCloudRegion、minimaxBillingPlans、MiniMaxBillingPlan、minimaxRegions、MiniMaxRegion、mimoBillingPlans、defaultOption、LEGACY_DEFAULT_USER_ROLES。
+ * Responses 目录：独立 openai responses 保留自己的服务 ID 与按服务配置，复用 OpenAI 模型候选并接入翻译能力分类，不改变既有 Chat 服务。
  * 模块边界：本文件属于 core 领域层，只定义规则、类型与纯转换；目录解析只接受表自身登记的键，未知服务、语言或界面语言按公开回退契约处理；不直接读写浏览器存储、不发起网络请求、不挂载 Vue/WXT 入口，持久化、协议调用和界面编排分别由 services、providers 与 features 承担。
  */
 
@@ -40,6 +41,7 @@ export const services = {
     volcTranslation: "volcTranslation", // 火山引擎机器翻译
     // 大模型翻译
     openai: "openai",
+    openaiResponses: "openaiResponses", // 独立原生 Responses 翻译服务，不改变既有 Chat 服务
     azureOpenai: "azureOpenai", // Azure 服务；保留旧 ID 以兼容已保存的配置和凭据
     gemini: "gemini",
     yiyan: "yiyan",
@@ -129,6 +131,7 @@ export const servicesType = {
     cloudVendor: new Set<string>(cloudVendorServices),
     AI: new Set([
         services.openai,
+        services.openaiResponses,
         services.azureOpenai,
         services.gemini,
         services.yiyan,
@@ -157,6 +160,7 @@ export const servicesType = {
     // 服务保留专用协议适配器，避免把 Claude/Gemini 等误当成兼容端点。
     aiSdk: new Set([
         services.openai,
+        services.openaiResponses,
         services.azureOpenai,
         services.yiyan,
         services.moonshot,
@@ -179,6 +183,7 @@ export const servicesType = {
     // 需要 token
     useToken: new Set([
         services.openai,
+        services.openaiResponses,
         services.azureOpenai,
         services.gemini,
         services.yiyan,
@@ -212,6 +217,7 @@ export const servicesType = {
     // 需要 model
     useModel: new Set([
         services.openai,
+        services.openaiResponses,
         services.azureOpenai,
         services.gemini,
         services.yiyan,
@@ -254,6 +260,7 @@ export const servicesType = {
     // 支持代理
     useProxy: new Set([
         services.openai,
+        services.openaiResponses,
         services.gemini,
         services.claude,
         services.deepL,
@@ -437,6 +444,7 @@ export const currentModelIds = {
 // currentModelIds 仍作为官方编号与旧配置迁移的单一来源；用户仍可在模型列表中主动选择更大的模型。
 export const defaultModelIds = {
     [services.openai]: "gpt-5.4-mini",
+    [services.openaiResponses]: "gpt-5.4-mini",
     [services.azureOpenai]: "gpt-5.4-mini",
     [services.gemini]: "gemini-3.5-flash-lite",
     [services.yiyan]: currentModelIds.yiyanFast,
@@ -514,6 +522,9 @@ export const models = new Map<string, Array<string>>([
     [services.perplexity, [defaultModelIds[services.perplexity], "sonar-pro", "sonar-reasoning", customModelString]],
     [services.ollama, [defaultModelIds[services.ollama], "qwen3:8b", "gemma3:12b", "llama3.2:3b", "mistral:7b", customModelString]],
 ]);
+
+// 独立 Responses 服务复用已维护的 OpenAI 模型候选，但保留独立模型偏好。
+models.set(services.openaiResponses, [...models.get(services.openai)!]);
 
 // 每个需要模型选择的 AI 服务都把列表第一项作为开箱即用的默认模型。
 // 统一从模型列表生成，避免设置页、配置初始化和请求模板各自维护一份默认值。
@@ -636,6 +647,7 @@ export const options = {
         {value: services.mimo, label: "小米 MiMo", catalogKind: "provider"},
         {value: services.jieyue, label: "阶跃星辰", catalogKind: "provider"},
         {value: services.openai, label: "OpenAI", catalogKind: "provider"},
+        {value: services.openaiResponses, label: "openai responses", catalogKind: "provider"},
         {value: services.gemini, label: "Gemini", catalogKind: "provider"},
         {value: services.claude, label: "Claude", catalogKind: "provider"},
         {value: services.grok, label: "Grok (X.AI)", catalogKind: "provider"},

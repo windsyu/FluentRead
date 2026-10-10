@@ -1,7 +1,7 @@
 /**
  * @file src/ui/view-model/serviceCatalog.ts
  * 文件职责：为服务与模型选择界面提供无框架的视图模型转换，把扁平配置选项整理成可搜索、可分层和可稳定展示的数据。
- * 主要内容：定义服务目录分组与官方网站入口，提供云服务厂商的免费额度与开通指引，安全派生自定义服务站点，按服务与模型关键词搜索。
+ * 主要内容：定义服务目录分组与官方网站入口，提供云服务厂商的免费额度与开通指引，安全派生自定义及独立 Responses 服务站点，只保留 HTTP(S) origin 防止查询或凭据泄漏，按服务与模型关键词搜索。
  * 模块边界：这些函数不读取 Vue 状态、不修改 Config，也不判断平台能力或发起连接测试；原始目录由 core/config 提供，Popup/Options 等调用方负责交互与渲染。
  */
 import { resolveConfiguredModel, services } from '@/src/core/config/catalog'
@@ -34,6 +34,7 @@ const serviceWebsites = {
   chromeTranslator: 'https://developer.chrome.com/docs/ai/translator-api',
   localTranslation: serviceGuide,
   openai: 'https://platform.openai.com/',
+  openaiResponses: 'https://platform.openai.com/',
   azureOpenai: 'https://ai.azure.com/',
   gemini: 'https://aistudio.google.com/',
   yiyan: 'https://console.bce.baidu.com/qianfan/',
@@ -172,7 +173,7 @@ export function getServiceWebsite(
   service: string,
   context: { endpoint?: string; minimaxRegion?: string } = {},
 ): ServiceWebsite | undefined {
-  if (isCustomOpenAIProviderId(service) || service === services.custom || service === services.newapi) {
+  if (isCustomOpenAIProviderId(service) || service === services.custom || service === services.newapi || service === services.openaiResponses) {
     try {
       const endpoint = new URL(context.endpoint || '')
       if (endpoint.protocol === 'https:' || endpoint.protocol === 'http:') {
@@ -182,7 +183,8 @@ export function getServiceWebsite(
       // 正在输入、尚未配置或无效地址仍提供配置说明入口。
     }
     return {
-      url: service === services.newapi ? serviceWebsites.newapi : serviceGuide,
+      url: service === services.newapi ? serviceWebsites.newapi
+        : service === services.openaiResponses ? serviceWebsites.openaiResponses : serviceGuide,
       kind: 'documentation',
     }
   }

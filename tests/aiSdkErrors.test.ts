@@ -16,6 +16,18 @@ function apiError(overrides: Partial<ConstructorParameters<typeof APICallError>[
 }
 
 describe('AI SDK provider error normalization', () => {
+    it('Responses HTML 错误页不泄漏网页或误建议 Chat 协议，仍保留脱敏请求 ID', () => {
+        const key = 'fixture-native-secret';
+        const error = normalizeAiSdkError(services.openaiResponses, apiError({
+            statusCode: 404, responseBody: `<html>${key}</html>`,
+            responseHeaders: {'content-type': 'text/html', 'x-request-id': key},
+            isRetryable: false,
+        }), key);
+        expect(error).toMatchObject({kind: 'bad-request', statusCode: 404, retryable: false});
+        expect(error.message).toContain('无法识别的错误');
+        expect(error.requestId).toBe('[已隐藏的密钥]');
+        expect(error.message).not.toMatch(/Chat Completions|<html>|fixture-native-secret/u);
+    });
     it.each([
         ['<!DOCTYPE html><html lang="zh-Hans"><head><script>private-page-data</script></head></html>', undefined],
         ['  <HTML><BODY>private-page-data</BODY></HTML>', {}],

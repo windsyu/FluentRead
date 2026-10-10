@@ -2,8 +2,8 @@
   "name": "FluentRead-流畅阅读",
   "description": "Closer languages. A bigger world. 让语言更近，让世界更大。",
   "private": true,
-  "version": "0.0.37",
-  "userscriptVersion": "2.0.1",
+  "version": "0.0.38",
+  "userscriptVersion": "2.0.2",
   "type": "module",
   "engines": {
     "node": ">=20"

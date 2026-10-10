@@ -56,6 +56,8 @@ Translate pages and restore originals; translate selected or hovered text; use s
 
 For the slim build, the script manager downloads fixed versions of UI libraries from jsDelivr at installation; the standalone build includes them. Chinese and English UI text ships with both. On first use, Japanese, Korean, French, Russian, and Spanish UI text is downloaded from jsDelivr or GitHub and cached in the script manager’s private storage. These resource requests contain no page text or API keys. If you are offline before a language is cached, the UI temporarily falls back to Chinese.
 
+Unpublished local builds keep using published language resources pinned to an exact commit; they never request nonexistent remote files. New or changed text is included as small compressed overrides and merged after the resource loads. The cache retains the original published resource, without local overrides. Building does not publish or upload these changes.
+
 </details>
 
 <details class="guide-details">

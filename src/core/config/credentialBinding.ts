@@ -1,7 +1,7 @@
 /**
  * @file src/core/config/credentialBinding.ts
  * 文件职责：把服务凭据绑定到请求实际抵达的配置地址，防止配置替换后把旧密钥带到另一端点。
- * 主要内容：按 provider 的真实路由计算 token、自定义请求头与腾讯共享密钥的目标身份；在单次解绑中复用服务比较与自定义端点索引，目标变化且未显式重绑时丢弃旧凭据。
+ * 主要内容：按 provider 的真实路由计算 token、自定义请求头与腾讯共享密钥的目标身份；Responses 使用共享原生端点补全，使根地址与完整路径的等价配置不误清凭据；在单次解绑中复用服务比较与自定义端点索引，目标变化且未显式重绑时丢弃旧凭据。
  * 模块边界：本文件只做 Config、凭据映射与 URL 的纯比较，不读取存储、不执行请求；调用方仍负责配置合并与持久化。
  */
 import {
@@ -21,6 +21,7 @@ import {isCustomOpenAIProviderId} from './customOpenAI';
 import {DEFAULT_DEEPLX_ENDPOINT, parseDeepLXEndpoints} from './deeplx';
 import {getDeepLEndpoint} from './deepl';
 import {normalizeAzureEndpoint} from './azure';
+import {normalizeOpenAIResponsesEndpoint} from './openaiResponses';
 import type {ConfigCredentialField, ConfigCredentials} from './credentials';
 import type {Config} from './model';
 
@@ -126,6 +127,15 @@ const FIXED_TRANSLATION_DESTINATIONS = new Set<string>([
 ]);
 
 function tokenCredentialDestination(config: Config, service: string, customEndpoint: (service: string) => string): string {
+    if (service === services.openaiResponses) {
+        const endpoint = config.proxy[service]?.trim() || urls[service];
+        try {
+            return `urls:${normalizeOpenAIResponsesEndpoint(endpoint)}`;
+        } catch {
+            // 未完成或无效的表单仍可保存；真实请求由供应商校验并返回修正提示。
+            return `urls:${canonicalFetchEndpoint(endpoint)}`;
+        }
+    }
     if (isCustomOpenAIProviderId(service)) {
         const proxy = config.proxy[service]?.trim();
         if (proxy) return urlDestination(service, proxy);

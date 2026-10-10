@@ -1,5 +1,15 @@
 # 测试与回归
 
+## 独立 openai responses 翻译协议
+
+`tests/openaiResponsesConfig.test.ts`、`tests/openaiResponses.test.ts` 与 `tests/responsesApiStream.test.ts` 覆盖独立配置及凭据绑定、原生请求、真实 SDK 连接检查与翻译、规范地址缓存隔离、SSE 分片及终态、取消/超时清理和 HTTP 重试。旧 Chat transport 保留 `tests/aiSdkOpenAICompatible.test.ts` 回归。
+
+生产 Chrome 构建后运行 `node scripts/testing/run-openai-responses-ui-test.cjs --extension-dir .output/chrome-mv3 --playwright-root <Node包目录> --focus-safe-helper scripts/testing/focus-safe-browser.cjs --artifacts-dir /private/tmp/fluentread-openai-responses-ui`。现代 Chrome 可增加 `--browser-path <Chrome可执行文件> --load-via-cdp`，仅在自有临时 profile 动态加载扩展，并核对返回的准确扩展 ID。
+
+专项通过本机确定性 HTTP/SSE 夹具验证设置保存重开、根地址/版本/完整端点、连接检查、网页翻译—恢复—再翻译及失败反馈；报告记录实际焦点隔离、窗口位置与执行范围，不记录凭据。它不证明外部服务、真实模型或 Firefox 实机行为。自建 New API 验收需另外提供服务地址、模型及本机凭据文件位置，仅在隔离 profile 内执行；真实验证完成前不发布。
+
+本轮完成和未完成的检查、基线故障对照与窗口限制见 [2026-10-10 本地验收记录](./reports/openai-responses-20261010.md)。
+
 ## 扩展体积与共享推理引擎
 
 `pnpm analyze:bundle [构建目录] [基线目录]` 统计真实字节、文件类型、目录、最大文件和相同内容，详见 [2026-10-06 体积记录](./maintainers/extension-size-20261006.md)。普通开发构建不内联源码映射；需要时使用 `FLUENTREAD_DEV_SOURCEMAPS=1 pnpm dev`。手动加载可设置 `FLUENTREAD_DISABLE_BROWSER_RUNNER=1`。

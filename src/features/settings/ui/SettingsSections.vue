@@ -535,6 +535,7 @@ import FeatureEnableCard from '@/src/ui/components/FeatureEnableCard.vue';
 import { computed, defineAsyncComponent, nextTick, ref, watch, onActivated, onBeforeUnmount, onDeactivated, onUnmounted } from 'vue'
 
 import {isValidAzureEndpoint} from '@/src/core/config/azure';
+import {urls} from '@/src/core/config/constants';
 import { cloudRegionOptions, customModelString, defaultOption, getCloudCredentialLabels, getDefaultCloudRegion, getMultilingualTargetLanguageLabel, models, options, resolveConfiguredModel, services, servicesType } from '@/src/core/config/catalog';
 import GlossaryLibrarySelect from '@/src/ui/components/GlossaryLibrarySelect.vue';
 import {
@@ -868,7 +869,8 @@ const selectedConfigurationWebsite = computed(() => {
   const service = selectedConfigurationService.value;
   const endpoint = isCustomOpenAIProviderId(service)
     ? getCustomOpenAIProvider(config.value.customOpenAIProviders, service)?.endpoint
-    : service === services.newapi ? config.value.newApiUrl : config.value.custom;
+    : service === services.openaiResponses ? config.value.proxy[service] || urls[service]
+      : service === services.newapi ? config.value.newApiUrl : config.value.custom;
   return getServiceWebsite(service, {endpoint, minimaxRegion: config.value.minimaxRegion});
 });
 const selectedConfigurationCredentialGuide = computed(

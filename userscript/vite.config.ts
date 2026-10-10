@@ -10,6 +10,8 @@ import {defineConfig, normalizePath, transformWithEsbuild, type Plugin} from 'vi
 import {createUserscriptMetadata} from './metadata';
 import {createUserscriptCharacterDataCompressionPlugin} from './characterDataPlugin';
 import {UI_LANGUAGE_BUNDLES, zhCNMessages} from './languageBundles';
+import {createUiLanguageBundleOverride} from './languageBundleOverrides';
+import type {UiLanguageBundle} from '../src/core/i18n/types';
 
 const root = resolve(__dirname, '..');
 const packageJson = JSON.parse(fs.readFileSync(resolve(root, 'package.json'), 'utf8')) as {
@@ -47,8 +49,15 @@ function installedVersion(name: string): string {
 
 // 脚本管理器在安装时缓存固定版本的通用库；仓库资源固定到已发布提交，更新资源时同步换提交。
 const userscriptResourceCommit = '184a3d74f61b9d2a8d47080787f7e0180b98414d';
-// 语言文件的内容哈希来自合并后的消息目录，固定到首次包含这些文件的提交。
+// 固定已发布语言资源；本地新文案只作为压缩覆盖随脚本携带，不生成不存在的远端 URL。
 const userscriptLanguageResourceCommit = '1cd92296ef25e89a411193894a1225db582e4a17';
+const remoteUiLanguageBundles = {
+    'es-ES': 'es-ES.6f20f8051523c252.json',
+    'fr-FR': 'fr-FR.0c6b5da65ad0420d.json',
+    'ja-JP': 'ja-JP.4942ca4aea3bc2d2.json',
+    'ko-KR': 'ko-KR.cf4f9417c7953336.json',
+    'ru-RU': 'ru-RU.7f99a018d009f20e.json',
+};
 const iconMetaUrl = greasyForkSource
     ? `https://cdn.jsdelivr.net/gh/FluentRead/FluentRead@${userscriptResourceCommit}/public/icon/64.png`
     : iconDataUrl;
@@ -78,18 +87,15 @@ const compressedUiLanguageBundles = greasyForkSource ? {} : Object.fromEntries(O
     language,
     Buffer.from(gzipUiMessages(Buffer.from(serializeUiMessages(bundle)), {level: 9})).toString('base64'),
 ]));
-const remoteUiLanguageBundles = Object.fromEntries(Object.entries(UI_LANGUAGE_BUNDLES)
-    .filter(([language]) => language !== 'en-US')
-    .map(([language, bundle]) => {
-        const contents = JSON.stringify(bundle);
-        const digest = createHash('sha256').update(contents).digest('hex').slice(0, 16);
-        const fileName = `${language}.${digest}.json`;
-        const filePath = resolve(root, 'userscript/languages', fileName);
-        if (!fs.existsSync(filePath) || fs.readFileSync(filePath, 'utf8').trimEnd() !== contents) {
-            throw new Error(`Userscript language data missing or stale: ${fileName}; run pnpm generate:userscript-languages`);
-        }
-        return [language, fileName];
-    }));
+const compressedUiLanguageOverrides = Object.fromEntries(Object.entries(remoteUiLanguageBundles).flatMap(([language, fileName]) => {
+    const contents = fs.readFileSync(resolve(root, 'userscript/languages', fileName), 'utf8').trimEnd();
+    const digest = createHash('sha256').update(contents).digest('hex').slice(0, 16);
+    if (fileName !== `${language}.${digest}.json`) throw new Error(`Pinned userscript language content changed: ${fileName}`);
+    const pinned = JSON.parse(contents) as UiLanguageBundle;
+    const current = UI_LANGUAGE_BUNDLES[language as keyof typeof UI_LANGUAGE_BUNDLES];
+    const override = createUiLanguageBundleOverride(pinned, current);
+    return override ? [[language, Buffer.from(gzipUiMessages(Buffer.from(serializeUiMessages(override)), {level: 9})).toString('base64')]] : [];
+}));
 const unicodeNotice = `/*\n${fs.readFileSync(resolve(root, 'public/third-party-notices/unicode-17.0.0.txt'), 'utf8')}\n*/`;
 const serviceIconsNotice = `/*\n${fs.readFileSync(resolve(root, 'public/third-party-notices/lobe-icons-MIT.txt'), 'utf8')}\n*/`;
 const tinycolorNotice = `/*\n@ctrl/tinycolor 3.6.1 — MIT\n${fs.readFileSync(resolve(root, 'public/third-party-notices/tinycolor-MIT.txt'), 'utf8')}\n*/`;
@@ -515,6 +521,7 @@ export default defineConfig({
         'import.meta.env.MANIFEST_VERSION': '2',
         __FLUENTREAD_USERSCRIPT_LANGUAGE_BUNDLES__: JSON.stringify(compressedUiLanguageBundles),
         __FLUENTREAD_USERSCRIPT_REMOTE_LANGUAGES__: JSON.stringify(remoteUiLanguageBundles),
+        __FLUENTREAD_USERSCRIPT_LANGUAGE_OVERRIDES__: JSON.stringify(compressedUiLanguageOverrides),
         __FLUENTREAD_USERSCRIPT_RESOURCE_COMMIT__: JSON.stringify(userscriptLanguageResourceCommit),
         __FLUENTREAD_FULL_OPTIONS__: JSON.stringify(bundleLibraries),
     },

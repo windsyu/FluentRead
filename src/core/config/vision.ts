@@ -1,7 +1,7 @@
 /**
  * @file src/core/config/vision.ts
  * 文件职责：定义圈选图片识别的配置常量、传输边界和模型视觉能力解析。
- * 主要内容：按服务传输边界、已核实的图片或仅文本模型解析识图能力；未确认的 AI 模型返回 unknown，机器翻译返回 unsupported，并支持用户按服务和模型保存显式覆盖。
+ * 主要内容：按服务传输边界、已核实的图片或仅文本模型解析识图能力；未确认的 AI 模型返回 unknown，机器翻译与尚未适配图片的独立 Responses 服务返回 unsupported，并支持用户按服务和模型保存显式覆盖。
  * 模块边界：本文件只执行纯配置判断，不发起网络请求、不读取凭据，也不猜测模型名称；实际图片传输由翻译运行时负责。
  */
 
@@ -63,6 +63,8 @@ export function supportsVisionTransport(service: string, _model?: string): boole
   const normalized = typeof service === 'string' ? service.trim() : '';
   const model = typeof _model === 'string' ? _model.trim() : '';
   if (!normalized || !model || servicesType.isMachine(normalized)) return false;
+  // 独立 Responses 服务首期仅支持文本翻译，不能因 aiSdk 分类误开放图片请求。
+  if (normalized === services.openaiResponses) return false;
   if (normalized === services.tongyi && model.startsWith('qwen-mt')) return false;
   if (normalized === services.doubao && isDoubaoSeedTranslationModel(model)) return false;
   return servicesType.isAiSdk(normalized)

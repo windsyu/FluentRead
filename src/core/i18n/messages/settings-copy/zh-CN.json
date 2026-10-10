@@ -1,5 +1,9 @@
 {
   "messages": {
+    "settings.services.responses.endpoint": "接口地址",
+    "settings.services.responses.endpointHelp": "留空直连 OpenAI；自建 New API 可填写根地址、/v1 或完整 /responses 地址。使用原生流式接口，收齐回复后显示完整译文；当前不支持阅读助手、写作助手或图片识别。",
+    "settings.services.responses.bodyHelp": "使用 Responses 原生参数（如 reasoning）。messages 会报错；temperature、max_output_tokens、max_tokens、max_completion_tokens 会被移除。stream 固定为 true，store 固定为 false。",
+    "settings.services.responses.bodyError": "请输入合法的 JSON 对象；格式无效时不会发送请求。",
     "options.panel.floatingBall": "悬浮球进阶设置",
     "settings.general.bilingualSentenceHighlightGroupingHint": "注意，当原文与译文的句子划分不同时，会一起高亮相邻句子。",
     "learning.collection.moreActions": "更多收藏操作",

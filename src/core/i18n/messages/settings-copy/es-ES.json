@@ -1,5 +1,9 @@
 {
   "messages": {
+    "settings.services.responses.endpoint": "Dirección de la API",
+    "settings.services.responses.endpointHelp": "Déjala vacía para OpenAI. Para New API autoalojado, introduce una URL raíz, /v1 o una URL /responses completa. El flujo se recopila antes de mostrar la traducción completa. No se admiten asistentes de lectura, escritura ni reconocimiento de imágenes.",
+    "settings.services.responses.bodyHelp": "Usa campos nativos de Responses como reasoning. messages se rechaza; temperature, max_output_tokens, max_tokens y max_completion_tokens se eliminan. stream siempre es true y store siempre es false.",
+    "settings.services.responses.bodyError": "Introduce un objeto JSON válido. No se envían cuerpos no válidos.",
     "options.panel.floatingBall": "Ajustes del botón flotante",
     "settings.general.bilingualSentenceHighlightGroupingHint": "Si las oraciones se dividen de forma distinta, se resaltan juntas las oraciones contiguas.",
     "learning.collection.moreActions": "Más acciones sobre elementos guardados",

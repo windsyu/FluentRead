@@ -1,5 +1,9 @@
 {
   "messages": {
+    "settings.services.responses.endpoint": "Adresse de l’API",
+    "settings.services.responses.endpointHelp": "Laissez vide pour OpenAI. Pour New API auto-hébergé, indiquez une URL racine, /v1 ou une URL /responses complète. Le flux est collecté avant l’affichage de la traduction complète. Les assistants de lecture, d’écriture et la reconnaissance d’images ne sont pas pris en charge.",
+    "settings.services.responses.bodyHelp": "Utilisez des champs natifs Responses comme reasoning. messages est rejeté ; temperature, max_output_tokens, max_tokens et max_completion_tokens sont supprimés. stream vaut toujours true et store vaut toujours false.",
+    "settings.services.responses.bodyError": "Saisissez un objet JSON valide. Aucun corps invalide n’est envoyé.",
     "options.panel.floatingBall": "Réglages du bouton flottant",
     "settings.general.bilingualSentenceHighlightGroupingHint": "Si les phrases sont découpées différemment, les phrases voisines sont mises en évidence ensemble.",
     "learning.collection.moreActions": "Autres actions sur les éléments enregistrés",

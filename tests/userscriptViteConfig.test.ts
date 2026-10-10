@@ -6,7 +6,9 @@ import {gunzipSync} from 'node:zlib';
 import {runInNewContext} from 'node:vm';
 import {describe, expect, it, vi} from 'vitest';
 import {ungzip} from 'pako';
-import {zhCNMessages, userscriptMessages} from '@/userscript/languageBundles';
+import {zhCNMessages, userscriptMessages, UI_LANGUAGE_BUNDLES} from '@/userscript/languageBundles';
+import {createUiLanguageBundleOverride, applyUiLanguageBundleOverride} from '@/userscript/languageBundleOverrides';
+import type {UiLanguageBundle} from '@/src/core/i18n/types';
 import {zhCNMessages as extensionChinese} from '@/src/core/i18n/messages/zh-CN';
 import {installInformationHighlight} from '@/userscript/informationHighlight';
 import {inflateWithPako} from '@/userscript/pakoRuntime';
@@ -96,6 +98,35 @@ describe('userscript browser shim injection', () => {
             const committed = execFileSync('git', ['show', `${commit}:${path}`], {cwd: process.cwd(), encoding: 'utf8'});
             expect(committed).toBe(readFileSync(resolve(process.cwd(), path), 'utf8'));
         }
+    });
+    it('combines published immutable resources and small embedded deltas into the exact current language catalogs', () => {
+        const defines = (userscriptConfig as {define: Record<string, string>}).define;
+        const files = JSON.parse(defines.__FLUENTREAD_USERSCRIPT_REMOTE_LANGUAGES__) as Record<string, string>;
+        const overrides = JSON.parse(defines.__FLUENTREAD_USERSCRIPT_LANGUAGE_OVERRIDES__) as Record<string, string>;
+        expect(Object.values(overrides).reduce((bytes, value) => bytes + value.length, 0)).toBeLessThan(32_000);
+        for (const [language, file] of Object.entries(files)) {
+            const pinned = JSON.parse(readFileSync(resolve(process.cwd(), 'userscript/languages', file), 'utf8')) as UiLanguageBundle;
+            const embedded = overrides[language];
+            const current = UI_LANGUAGE_BUNDLES[language as keyof typeof UI_LANGUAGE_BUNDLES];
+            const restored = embedded ? applyUiLanguageBundleOverride(pinned,
+                JSON.parse(gunzipSync(Buffer.from(embedded, 'base64')).toString('utf8'))) : pinned;
+            expect(restored).toEqual(current);
+            expect(restored.messages['settings.services.responses.endpointHelp']).toBe(current.messages['settings.services.responses.endpointHelp']);
+        }
+    });
+    it('diffs additions, edits, removals and ordered patterns without mutating published data', () => {
+        const pinned: UiLanguageBundle = {messages: {keep: 'same', edit: 'old', remove: 'old'},
+            legacyText: {keep: 'same', remove: 'old'}, legacyPatterns: {early: [['old', 'old']], late: []}};
+        const current: UiLanguageBundle = {messages: {keep: 'same', edit: 'new', add: 'new'},
+            legacyText: {keep: 'same', add: 'new'}, legacyPatterns: {early: [], late: [['new', 'new', [1]]]}};
+        const original = JSON.stringify(pinned);
+        expect(createUiLanguageBundleOverride(pinned, pinned)).toBeUndefined();
+        const override = createUiLanguageBundleOverride(pinned, current)!;
+        expect(override.messages).toEqual({edit: 'new', add: 'new'});
+        expect(override.removed).toEqual({messages: ['remove'], legacyText: ['remove']});
+        expect(applyUiLanguageBundleOverride(pinned, override)).toEqual(current);
+        expect(JSON.stringify(pinned)).toBe(original);
+        expect(applyUiLanguageBundleOverride(pinned, {})).toEqual(pinned);
     });
     it('embeds the Chinese fallback catalog, minus the reader-only keys of the extension document page, as lossless static data', () => {
         const plugin = createUserscriptCatalogCompressionPlugin() as unknown as {

@@ -1,5 +1,9 @@
 {
   "messages": {
+    "settings.services.responses.endpoint": "Endpoint address",
+    "settings.services.responses.endpointHelp": "Leave blank for OpenAI. For self-hosted New API, enter a root URL, /v1, or a complete /responses URL. Native streaming replies are collected before displaying the complete translation. Reading assistants, writing assistants and image recognition are not supported.",
+    "settings.services.responses.bodyHelp": "Use Responses-native fields such as reasoning. messages is rejected; temperature, max_output_tokens, max_tokens and max_completion_tokens are removed. stream is always true and store is always false.",
+    "settings.services.responses.bodyError": "Enter a valid JSON object. Invalid bodies are not sent.",
     "options.panel.floatingBall": "Floating button settings",
     "settings.general.bilingualSentenceHighlightGroupingHint": "When sentence boundaries differ, adjacent sentences are highlighted together.",
     "learning.collection.moreActions": "More saved-item actions",

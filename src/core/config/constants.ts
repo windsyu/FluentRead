@@ -65,6 +65,7 @@ export const urls: any = {
     [services.deepL]: "https://api-free.deepl.com/v2/translate",
     [services.deeplx]: DEFAULT_DEEPLX_ENDPOINT,
     [services.openai]: "https://api.openai.com/v1/chat/completions",
+    [services.openaiResponses]: "https://api.openai.com/v1/responses",
     [services.azureOpenai]: "https://your-resource-name.openai.azure.com/openai/v1/chat/completions",
     [services.moonshot]: "https://api.moonshot.cn/v1/chat/completions",
     [services.custom]: "https://localhost:11434/v1/chat/completions",

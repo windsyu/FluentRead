@@ -2,15 +2,15 @@
  * @file src/providers/translation/ai-sdk/openai-compatible.ts
  *
  * 文件职责：通过 Vercel AI SDK 执行 OpenAI 兼容翻译请求，为多个模型服务共享超时、重试、端点和响应校验。
- * 主要内容：冻结请求级配置，解析服务 endpoint 与模型，构造 commonMsgTemplate，调用 generateText，清理推理内容，并将 SDK 异常转换为 LlmTransportError。 可核对的公开符号包括 AI_SDK_REQUEST_TIMEOUT_MS、AI_SDK_MAX_RETRIES、AiSdkTranslationRequest、translateWithOpenAICompatibleAiSdk。
+ * 主要内容：冻结请求配置，构造 Chat 或原生 Responses 请求；将 Responses SSE 完整译文桥接为 SDK 文本响应，复用调度、重试和总超时，并按实际终态上报用量及脱敏异常。
  * 模块边界：本文件位于 provider 适配层，只把统一翻译请求转换为外部或浏览器服务协议；不管理页面 DOM、UI 生命周期或配置持久化，缓存、去重和超时总预算由 translation broker 统一协调。
  */
 
 import {createOpenAICompatible} from '@ai-sdk/openai-compatible';
-import {generateText} from 'ai';
+import {APICallError, generateText} from 'ai';
 import {config} from '@/src/services/config/store';
 import {stripTranslationReasoning as contentPostHandler} from '@/src/core/translation/prompts';
-import {commonMsgTemplate} from '@/src/services/translation/templates';
+import {commonMsgTemplate, responsesMsgTemplate} from '@/src/services/translation/templates';
 import {services} from '@/src/core/config/catalog';
 import {isCustomOpenAIProviderId} from '@/src/core/config/customOpenAI';
 import {parseCustomHeaders, mergeCustomHeaders} from '@/src/core/config/customHeaders';
@@ -29,7 +29,8 @@ import {
   type TranslationProviderRequestContext,
 } from '@/src/services/translation/requestSnapshot';
 import type {TranslationProviderConfigSnapshot} from '@/src/services/translation/types';
-import {normalizeOpenAICompatibleUsage} from '../usage';
+import {normalizeDeepSeekResponsesUsage, normalizeOpenAICompatibleUsage} from '../usage';
+import {readResponsesApiStream, ResponsesApiStreamError} from '../responses-api';
 import {normalizeTranslationMaxRetries} from '@/src/core/config/scheduling';
 
 export const AI_SDK_REQUEST_TIMEOUT_MS = 40_000;
@@ -50,10 +51,9 @@ export interface AiSdkTranslationRequest extends TranslationProviderRequestConte
 
 interface OpenAICompatiblePayload extends Record<string, unknown> {
   model: string;
-  messages: unknown[];
 }
 
-function parsePayload(body: string): OpenAICompatiblePayload {
+function parsePayload(body: string, responses = false): OpenAICompatiblePayload {
   let payload: unknown;
   try {
     payload = JSON.parse(body);
@@ -78,7 +78,12 @@ function parsePayload(body: string): OpenAICompatiblePayload {
       retryable: false,
     });
   }
-  if (!Array.isArray(candidate.messages)) {
+  if (responses && (typeof candidate.instructions !== 'string' || !Array.isArray(candidate.input) || candidate.input.length === 0)) {
+    throw new LlmTransportError('Responses 请求体必须包含字符串 instructions 和非空数组 input。', {
+      kind: 'bad-request', retryable: false,
+    });
+  }
+  if (!responses && !Array.isArray(candidate.messages)) {
     throw new LlmTransportError('自定义请求体中的 messages 必须是数组。', {
       kind: 'bad-request',
       retryable: false,
@@ -88,13 +93,13 @@ function parsePayload(body: string): OpenAICompatiblePayload {
   return {
     ...candidate,
     model: candidate.model.trim(),
-    messages: candidate.messages,
   };
 }
 
 function providerHeaders(service: string, apiKey: string): Record<string, string> | undefined {
   const headers: Record<string, string> = {};
   if (service === services.azureOpenai && apiKey) headers['api-key'] = apiKey;
+  if (service === services.openaiResponses) headers.Accept = 'text/event-stream';
   if (service === services.openrouter) {
     headers['HTTP-Referer'] = 'https://fluent.thinkstu.com';
     headers['X-Title'] = 'FluentRead';
@@ -194,7 +199,7 @@ function compatibilityFetch(
 ) {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const startedAt = Date.now();
-    let response: Response;
+    let response: Response | undefined;
     try {
       const schedulerContext = getTranslationRequestScheduler(request);
       const fetchAttempt = () => runtimeFetch(endpoint.exactEndpoint || input, init);
@@ -204,14 +209,53 @@ function compatibilityFetch(
             identity: {service: request.serviceOverride || schedulerContext.identity?.service, model: requestedModel},
           })
         : await fetchAttempt();
+      if (endpoint.protocol === 'responses' && response.ok) {
+        const result = await readResponsesApiStream(response, init?.signal ?? undefined);
+        if (!contentPostHandler(result.text)) {
+          throw new ResponsesApiStreamError('翻译服务已响应，但没有返回有效译文。');
+        }
+        const usage = normalizeDeepSeekResponsesUsage(result.response.usage, result.response.model ?? requestedModel);
+        const body: Record<string, unknown> = {
+          choices: [{message: {role: 'assistant', content: result.text}, finish_reason: 'stop'}],
+          model: usage.actualModel ?? requestedModel,
+        };
+        if (usage.usageAvailability === 'reported') body.usage = {
+          prompt_tokens: usage.inputTokens,
+          completion_tokens: usage.outputTokens,
+          total_tokens: usage.totalTokens,
+        };
+        const headers = new Headers(response.headers);
+        headers.delete('content-length');
+        headers.delete('content-encoding');
+        headers.set('content-type', 'application/json');
+        const bridged = new Response(JSON.stringify(body), {
+          status: response.status, statusText: response.statusText, headers,
+        });
+        reportTranslationModelUsage(request, {
+          ...usage, startedAt, durationMs: Math.max(0, Date.now() - startedAt),
+          outcome: 'success', statusCode: response.status,
+        });
+        return bridged;
+      }
     } catch (error) {
       reportTranslationModelUsage(request, {
         startedAt,
         durationMs: Math.max(0, Date.now() - startedAt),
         actualModel: requestedModel,
-        outcome: init?.signal?.aborted ? 'cancelled' : 'error',
+        outcome: init?.signal?.aborted
+          ? request.abortSignal?.aborted ? 'cancelled' : 'timeout'
+          : 'error',
+        ...(response ? {statusCode: response.status} : {}),
         usageAvailability: 'unreported',
       });
+      if (error instanceof ResponsesApiStreamError) {
+        // 流内错误不是 HTTP 500；保留真实状态，经过 SDK 的统一脱敏边界，不自动重发已生成的请求。
+        throw new APICallError({
+          message: error.message, url: endpoint.endpoint, requestBodyValues: {},
+          statusCode: response?.status, responseHeaders: response ? Object.fromEntries(response.headers) : undefined,
+          data: {error: {message: error.message, code: error.code}}, isRetryable: false,
+        });
+      }
       throw error;
     }
 
@@ -280,22 +324,21 @@ async function translateSingle(
     kind: 'bad-request', retryable: false,
   });
   const apiKey = current.token[service]?.trim() || '';
-  const payload = parsePayload(commonMsgTemplate(
-    origin,
-    request.pageContext,
-    request.summaryPrompt,
-    request.summarySystemPrompt,
-    service,
-    request.targetLanguage,
-    request.modelOverride,
-    current,
-    request.thinkingOverride,
-    getTranslationImageInput(request),
-  ));
+  const responses = endpoint.protocol === 'responses';
+  let payload: OpenAICompatiblePayload;
+  try {
+    payload = parsePayload((responses ? responsesMsgTemplate : commonMsgTemplate)(
+      origin, request.pageContext, request.summaryPrompt, request.summarySystemPrompt,
+      service, request.targetLanguage, request.modelOverride, current,
+      request.thinkingOverride, getTranslationImageInput(request),
+    ), responses);
+  } catch (error) {
+    if (error instanceof LlmTransportError) throw error;
+    throw normalizeAiSdkError(service, error, [apiKey, ...Object.values(customHeaders)]);
+  }
 
-  // 协议的 stream 标记由 SDK 管理。自定义请求体仍可替换 model/messages，并添加任意
-  // OpenAI 兼容 provider 字段，但不能绕过解析器把 generateText 调用切换为 SSE。
-  const requestBody: Record<string, unknown> = {...payload, stream: false};
+  // Chat 保持非流式；独立 Responses 上游始终流式，再在 fetch 边界聚合成 SDK 的完整文本响应。
+  const requestBody: Record<string, unknown> = responses ? {...payload, stream: true, store: false} : {...payload, stream: false};
   const provider = createOpenAICompatible({
     name: 'fluentread',
     baseURL: endpoint.baseURL,

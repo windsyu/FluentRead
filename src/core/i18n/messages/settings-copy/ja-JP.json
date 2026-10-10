@@ -1,5 +1,9 @@
 {
   "messages": {
+    "settings.services.responses.endpoint": "API アドレス",
+    "settings.services.responses.endpointHelp": "空欄では OpenAI に直接接続します。自設 New API はルート URL、/v1、完全な /responses URL を指定できます。ストリームを収集後に訳文全体を表示します。読解・作文アシスタントと画像認識は未対応です。",
+    "settings.services.responses.bodyHelp": "reasoning など Responses のネイティブ項目を使用します。messages はエラーとなり、temperature、max_output_tokens、max_tokens、max_completion_tokens は削除されます。stream は true、store は false に固定されます。",
+    "settings.services.responses.bodyError": "有効な JSON オブジェクトを入力してください。不正な形式ではリクエストを送信しません。",
     "options.panel.floatingBall": "フローティングボタンの詳細設定",
     "settings.general.bilingualSentenceHighlightGroupingHint": "原文と訳文で文の区切りが異なる場合は、隣接する文をまとめてハイライトします。",
     "learning.collection.moreActions": "保存した項目のその他の操作",

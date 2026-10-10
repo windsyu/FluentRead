@@ -1,7 +1,8 @@
 <!--
  * @file src/features/settings/ui/services/ServiceConfiguration.vue
  * 文件职责：渲染当前翻译服务的详细连接配置：连接字段（密钥、区域、端点等）直接排在服务标题下方、不再单设“连接与密钥”标题，输入下方是添加密钥与密钥使用方式；其后用模型偏好、提示词、请求限制、接口兼容几个页签显示代理、密钥要求、提示词、自定义请求体与请求头、按域名移除来源头等字段，以及服务和模型的独立请求限制；只有一个页签的服务改用小节标题。
- * 主要内容：组件派生字段可见性与连接示例，密钥列表始终展示全部已保存的密钥并区分参与请求与备用的行，密钥要求放在接口兼容页签，提示词可在确认后一键同步到所有 AI 服务；将成对密钥 ID 同步到 apiKeys 和兼容 token，区分缺少必填 Key 与允许匿名的连接检查并管理等待超时；免费翻译检查完整目录并逐服务展示结果，Chrome 在点击时准备当前语言对并用进度条显示模型下载比例，通过配置 store 提交修改；隐藏、缓存停用或配置变化取消所属等待，Chrome 状态只在活跃服务订阅，恢复、同步模板和删除共用当前操作所属确认，同步复验来源并按确认时刻重算目标。
+ * 主要内容：组件派生字段可见性与连接示例，密钥列表始终展示全部已保存的密钥并区分参与请求与备用的行，密钥要求放在接口兼容页签，提示词可在确认后一键同步到所有 AI 服务；将成对密钥 ID 同步到 apiKeys 和兼容 token，区分缺少必填 Key 与允许匿名的连接检查并管理等待超时；免费翻译检查完整目录并逐服务展示结果，Chrome 在点击时准备当前语言对并用进度条显示模型下载比例，通过配置 store 提交修改；隐藏、缓存停用、配置根对象替换或真实连接参数变化取消所属等待，同值映射回灌和无关计数广播保留检查状态，Chrome 状态只在活跃服务订阅，恢复、同步模板和删除共用当前操作所属确认，同步复验来源并按确认时刻重算目标。
+ * Responses 连接：独立 openai responses 的地址沿用按服务存储的 proxy 映射，在连接区展示且不重复显示高级代理字段；隐藏不适用于原生请求的深度思考开关，原生流式接口收齐后仍显示完整译文。
  * 模块边界：本组件不执行网页正文翻译或保存公开配置中的明文凭据；Chrome 内置翻译仅在当前点击页完成模型自检，其他连接测试经后台消息，字段规则来自 core/config，服务切换由 ServiceCatalog 和 SettingsSections 负责。
  -->
 <template>
@@ -280,6 +281,13 @@
     <div v-if="compute.showTencent" class="connection-field"><div class="connection-field-label"><strong>Secret ID</strong></div><div class="connection-field-control"><el-input v-model="config.tencentSecretId" aria-label="Secret ID" placeholder="腾讯云 SecretId" /><p class="provider-field-help">腾讯云翻译服务提供的 SecretId</p></div></div>
     <div v-if="compute.showTencent" class="connection-field"><div class="connection-field-label"><strong>Secret Key</strong></div><div class="connection-field-control"><el-input v-model="config.tencentSecretKey" aria-label="Secret Key" type="password" show-password placeholder="腾讯云 SecretKey" /><p class="provider-field-help">腾讯云翻译服务提供的 SecretKey</p></div></div>
 
+    <div v-if="service === services.openaiResponses" class="connection-field" data-testid="responses-service-endpoint-row">
+      <div class="connection-field-label"><strong>{{ t('settings.services.responses.endpoint') }}</strong></div>
+      <div class="connection-field-control">
+        <el-input v-model="config.proxy[service]" :aria-label="`openai responses ${t('settings.services.responses.endpoint')}`" placeholder="https://api.openai.com/v1/responses" />
+        <p class="provider-field-help">{{ t('settings.services.responses.endpointHelp') }}</p>
+      </div>
+    </div>
     <div v-if="compute.showNewAPI" class="connection-field"><div class="connection-field-label"><strong>NewAPI接口</strong></div><div class="connection-field-control"><el-input v-model="config.newApiUrl" aria-label="接口地址" placeholder="请输入 New API 接口地址" /><p class="provider-field-help">填写 New API 服务的接口地址</p></div></div>
 
     <ApiKeyList :active="active" :context="config" :context-key="service"
@@ -329,7 +337,7 @@
     <el-tab-pane v-if="settingsTabs.translation" name="translation" :label="t(SETTINGS_TAB_LABELS.translation)">
       <section id="service-translation-settings" class="service-settings-panel" data-configuration-group="translation">
 
-          <div v-if="compute.showModel" class="connection-field" data-testid="model-thinking-control">
+          <div v-if="showModelThinking" class="connection-field" data-testid="model-thinking-control">
             <div class="connection-field-label">
               <strong>{{ t('settings.services.reasoning') }}</strong>
               <FieldHelp :content="t('settings.organization.thinkingHelp')" />
@@ -390,7 +398,7 @@
       <section id="service-custom-request-settings" class="service-settings-panel" data-configuration-group="custom-request">
         <div v-if="compute.showDeepseekApiType" class="connection-field"><div class="connection-field-label"><strong>API 格式</strong><FieldHelp :content="translateLegacy('选择 DeepSeek 接口使用的 API 格式')" /></div><div class="connection-field-control"><el-select v-model="config.deepseekApiType" aria-label="API 格式" placeholder="请选择 API 格式"><el-option class="select-left" v-for="item in options.deepseekApiType" :key="item.value" :label="item.label" :value="item.value" /></el-select></div></div>
 
-          <div v-if="compute.showAI && compute.showProxy" class="connection-field"><div class="connection-field-label"><strong>代理地址</strong><FieldHelp :content="translateLegacy('可选的代理地址；填写后，当前 AI 服务请求会优先发送到这里')" /></div><div class="connection-field-control"><el-input v-model="config.proxy[service]" aria-label="代理地址" placeholder="默认直连自定义接口" /></div></div>
+          <div v-if="compute.showAI && compute.showProxy && service !== services.openaiResponses" class="connection-field"><div class="connection-field-label"><strong>代理地址</strong><FieldHelp :content="translateLegacy('可选的代理地址；填写后，当前 AI 服务请求会优先发送到这里')" /></div><div class="connection-field-control"><el-input v-model="config.proxy[service]" aria-label="代理地址" placeholder="默认直连自定义接口" /></div></div>
 
         <div v-if="compute.showAI && usesApiKeyList" class="connection-field" data-api-key-requirement-row>
           <div class="connection-field-label"><strong>{{ t('settings.services.keys.requirement') }}</strong><FieldHelp :content="t('settings.services.keys.requirementHelp')" /></div>
@@ -416,8 +424,9 @@
 
           <RequestHeaderSettings v-if="compute.showAI" :active="active && activeSettingsTab === 'custom-request'" :config="config" />
 
-          <div v-if="compute.showCustomBody" class="connection-field"><div class="connection-field-label"><strong>自定义请求体</strong><FieldHelp :content="translateLegacy('填写要合并到翻译请求中的 JSON 参数对象')" /></div><div class="connection-field-control"><el-input v-model="config.customBody[service]" type="textarea" :rows="3" aria-label="自定义请求体" :class="{ 'input-error': !isValidCustomBody(config.customBody[service]) }" placeholder='例如：{"thinking": {"type": "disabled"}}' />
-              <div v-if="!isValidCustomBody(config.customBody[service])" class="error-text">请输入合法的 JSON 对象，否则该配置将被忽略</div></div></div>
+          <div v-if="compute.showCustomBody" class="connection-field"><div class="connection-field-label"><strong>自定义请求体</strong><FieldHelp :content="translateLegacy('填写要合并到翻译请求中的 JSON 参数对象')" /></div><div class="connection-field-control"><el-input v-model="config.customBody[service]" type="textarea" :rows="3" aria-label="自定义请求体" :class="{ 'input-error': !isValidCustomBody(config.customBody[service]) }" :placeholder="service === services.openaiResponses ? responsesBodyExample : translateLegacy(customBodyExample)" />
+              <p v-if="service === services.openaiResponses" class="provider-field-help">{{ t('settings.services.responses.bodyHelp') }}</p>
+              <div v-if="!isValidCustomBody(config.customBody[service])" class="error-text">{{ service === services.openaiResponses ? t('settings.services.responses.bodyError') : translateLegacy('请输入合法的 JSON 对象，否则该配置将被忽略') }}</div></div></div>
 
 
       </section>
@@ -505,6 +514,7 @@ const emit = defineEmits<{
 const config = toRef(props, 'config')
 const service = toRef(props, 'service')
 const compute = toRef(props, 'compute')
+const showModelThinking = computed(() => Boolean(compute.value.showModel) && service.value !== services.openaiResponses)
 const options = toRef(props, 'options')
 const isValidAzureEndpoint = toRef(props, 'isValidAzureEndpoint')
 const customProvider = toRef(props, 'customProvider')
@@ -643,6 +653,9 @@ function updateCustomProvider(field: 'name' | 'endpoint', value: string): void {
   if (!active.value) return
   emit('update:custom-provider', {[field]: value})
 }
+
+const customBodyExample = '例如：{"thinking": {"type": "disabled"}}';
+const responsesBodyExample = '{"reasoning": {"effort": "low"}}';
 
 const minimaxKeyKind = computed(() => {
   const token = config.value.token[service.value]?.trim() || ''
@@ -1111,7 +1124,13 @@ watch(() => active.value ? [config.value, service.value, config.value.from, conf
   config.value.ak, config.value.sk, config.value.appid, config.value.key, config.value.secret?.[service.value],
   config.value.apiKeyRotationEnabled?.[service.value], compute.value.requireApiKey,
   ...(service.value === services.freeTranslation ? [config.value.myMemoryEmail, config.value.freeTranslationTimeoutMs] : [])] : null,
-  invalidateConnectionTest, {flush: 'sync'})
+  (next, previous) => {
+    // 配置广播会重建嵌套映射，getter 因此重跑并产生新数组；逐项核对实际身份，
+    // 避免同值回灌取消在途检查，同时保留根对象替换、隐藏与真实参数变化的隔离。
+    if (next && previous && next.length === previous.length
+      && next.every((value, index) => Object.is(value, previous[index]))) return
+    invalidateConnectionTest()
+  }, {flush: 'sync'})
 watch(() => active.value && isChromeConnectionTest.value, enabled => {
   const generation = ++chromePreparationGeneration
   const revision = ++pendingChromePreparationRevision

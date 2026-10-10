@@ -42,6 +42,24 @@ function rebound(
 }
 
 describe('凭据与真实请求目的地绑定', () => {
+    it('Responses 等价根路径、版本路径和 Chat 迁移地址保留凭据，改道仍解绑', () => {
+        const service = services.openaiResponses;
+        const current = configured(service, {proxy: {[service]: 'https://gateway.example'}});
+        for (const endpoint of ['https://gateway.example/', 'https://gateway.example/v1',
+            'https://gateway.example/v1/responses/', 'https://gateway.example/v1/chat/completions#ignored']) {
+            expect(rebound(current, transition(current, {proxy: {[service]: endpoint}})).token[service]).toBe('openaiResponses-secret');
+        }
+        for (const endpoint of ['https://other.example/v1', 'https://gateway.example/exact-route',
+            'https://gateway.example/v2', 'https://gateway.example/v1/responses?route=different']) {
+            const next = transition(current, {proxy: {[service]: endpoint}});
+            expect(rebound(current, next).token).not.toHaveProperty(service);
+            expect(rebound(current, next, new Set([service])).token[service]).toBe('openaiResponses-secret');
+        }
+        const direct = configured(service);
+        expect(rebound(direct, transition(direct, {proxy: {[service]: 'https://api.openai.com/v1/responses'}})).token[service]).toBe('openaiResponses-secret');
+        const unfinished = configured(service, {proxy: {[service]: 'https://gateway.example/v1/response'}});
+        expect(rebound(unfinished, transition(unfinished, {theme: 'dark'})).token[service]).toBe('openaiResponses-secret');
+    });
     it('DeepL 套餐切换按真实端点解绑旧凭据，并保留显式重绑与稳定代理', () => {
         const free = configured(services.deepL, {deeplApiPlan: 'free'});
         const pro = transition(free, {deeplApiPlan: 'pro'});

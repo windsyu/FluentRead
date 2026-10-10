@@ -1,7 +1,7 @@
 /**
  * @file src/providers/translation/ai-sdk/endpoints.ts
  *
- * 文件职责：解析使用 Vercel AI SDK 的 OpenAI 兼容服务端点，统一 common、custom、New API、Azure、MiniMax 与 MiMo 的路由差异。
+ * 文件职责：解析使用 Vercel AI SDK 的 OpenAI 兼容服务端点，统一 Chat 服务与独立 OpenAI Responses 服务的路由差异。
  * 主要内容：声明 transport profile、服务 ID 和 endpoint 配置类型，补全自定义服务的根地址和版本 Base URL，保留完整或非标准接口，并由 resolveOpenAICompatibleEndpoint 返回 baseURL、route 与兼容参数。
  * 模块边界：本文件位于 provider 适配层，只把统一翻译请求转换为外部或浏览器服务协议；不管理页面 DOM、UI 生命周期或配置持久化，缓存、去重和超时总预算由 translation broker 统一协调。
  */
@@ -10,6 +10,7 @@ import {getMimoEndpoint, MINIMAX_ENDPOINTS, urls} from '@/src/core/config/consta
 import {config as runtimeConfig} from '@/src/services/config/store';
 import {referenceAiPlatformServices, services} from '@/src/core/config/catalog';
 import {normalizeAzureEndpoint} from '@/src/core/config/azure';
+import {normalizeOpenAIResponsesEndpoint} from '@/src/core/config/openaiResponses';
 import {
     getCustomOpenAIProvider,
     isCustomOpenAIProviderId,
@@ -17,7 +18,7 @@ import {
     type CustomOpenAIProvider,
 } from '@/src/core/config/customOpenAI';
 
-export type AiSdkEndpointRoute = 'common' | 'custom' | 'newapi' | 'azure';
+export type AiSdkEndpointRoute = 'common' | 'custom' | 'newapi' | 'azure' | 'responses';
 
 export const AI_SDK_TRANSPORT_PROFILE = 'vercel-ai-sdk-openai-compatible-v1' as const;
 
@@ -34,6 +35,8 @@ export interface AiSdkEndpointConfig {
 }
 
 export interface OpenAICompatibleEndpointResolution {
+    /** 只有独立 Responses 服务设置此字段；旧服务保持原有 Chat 解析结果。 */
+    protocol?: 'responses';
     /** 当前 FluentRead 适配器实际调用的规范 URL。 */
     endpoint: string;
     /** 传给 OpenAI 兼容 provider 的 URL 前缀，provider 会在其后追加 `/chat/completions`。 */
@@ -74,6 +77,7 @@ export const AI_SDK_SERVICE_IDS = Object.freeze([
     services.custom,
     services.newapi,
     services.azureOpenai,
+    services.openaiResponses,
 ]);
 
 const commonServices = new Set<string>(AI_SDK_COMMON_SERVICE_IDS);
@@ -168,6 +172,7 @@ export function normalizeNewApiEndpoint(rawEndpoint: string): string {
 }
 
 export function getAiSdkEndpointRoute(service: string): AiSdkEndpointRoute | null {
+    if (service === services.openaiResponses) return 'responses';
     if (commonServices.has(service)) return 'common';
     if (isCustomOpenAIProviderId(service)) return 'custom';
     if (service === services.newapi) return 'newapi';
@@ -205,6 +210,16 @@ export function resolveOpenAICompatibleEndpoint(
 
     let endpoint: string;
     switch (route) {
+        case 'responses': {
+            endpoint = normalizeOpenAIResponsesEndpoint(
+                config.proxy?.[service]?.trim() || urls[services.openaiResponses],
+            );
+            const base = new URL(endpoint);
+            base.search = '';
+            base.pathname = base.pathname.replace(/\/responses$/u, '') || '/';
+            // SDK 内部仍使用 Chat 模型；所有真实 HTTP 请求必须改写为完整 Responses 目标。
+            return {endpoint, baseURL: withoutTrailingSlash(base.toString()), exactEndpoint: endpoint, protocol: 'responses'};
+        }
         case 'common':
             endpoint = resolveCommonEndpoint(service, config);
             break;

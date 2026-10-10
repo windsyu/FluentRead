@@ -1,7 +1,7 @@
 /**
  * @file userscript/uiLanguageBundles.ts
  * 文件职责：按需加载并注册 userscript 的六种非中文界面语言。
- * 主要内容：英文内嵌 gzip；其他语言从静态 JSON 获取并缓存在 GM 私有存储中。
+ * 主要内容：英文内嵌 gzip；其他语言读取固定已发布 JSON 并缓存在 GM 私有存储中；本地未发布文案以小型 gzip 覆盖在注册前合并，不写入原始资源缓存。
  * 模块边界：只注册核心 i18n 资源，不访问宿主网页存储；扩展继续使用自己的按需资源加载器。
  */
 import {
@@ -15,6 +15,7 @@ import type {EnsureUiLanguageBundle, renderWithUiLanguageBundle as RenderWithUiL
 import {inflateGzipBase64} from './compression';
 import {userscriptFetch} from './http';
 import {getStoredValue, setStoredValue} from './storage';
+import {applyUiLanguageBundleOverride, type UiLanguageBundleOverride} from './languageBundleOverrides';
 
 const pending = new Map<RegisteredUiLanguage, Promise<boolean>>();
 
@@ -73,8 +74,15 @@ export const ensureUiLanguageBundle: EnsureUiLanguageBundle = (value) => {
     const existing = pending.get(registered);
     if (existing) return existing;
     const request = (embedded ? Promise.resolve(embedded) : compressed ? inflateBundle(compressed) : fetchRemoteBundle(remoteFile))
-        .then((bundle) => {
+        .then(async (bundle) => {
             if (!isBundle(bundle)) throw new TypeError('界面语言资源格式无效');
+            const overrides = typeof __FLUENTREAD_USERSCRIPT_LANGUAGE_OVERRIDES__ === 'undefined'
+                ? undefined : __FLUENTREAD_USERSCRIPT_LANGUAGE_OVERRIDES__[registered];
+            if (overrides) {
+                const override = JSON.parse(await inflateGzipBase64(overrides)) as UiLanguageBundleOverride;
+                bundle = applyUiLanguageBundleOverride(bundle, override);
+                if (!isBundle(bundle)) throw new TypeError('界面语言资源格式无效');
+            }
             registerUiLanguageBundle(registered, bundle);
             return true;
         })

@@ -1,11 +1,12 @@
 import {createRequire} from 'node:module'
+import {readFileSync} from 'node:fs'
 import {resolve} from 'node:path'
 import vue from '@vitejs/plugin-vue'
 import {createServer, type Plugin, type ViteDevServer} from 'vite'
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
-import {Config} from '@/src/core/config/model'
+import {Config, normalizeConfig} from '@/src/core/config/model'
 import {FREE_TRANSLATION_PROVIDERS} from '@/src/core/config/freeTranslation'
-import {defaultOption, options} from '@/src/core/config/catalog'
+import {defaultOption, options, services} from '@/src/core/config/catalog'
 
 const runtime = createRequire(import.meta.url)('vue') as typeof import('vue')
 const key = '__frServiceConfigurationLifecycle'
@@ -88,6 +89,30 @@ afterEach(async () => {
 })
 
 describe('实际服务连接配置的活跃生命周期与确认归属', () => {
+  it('原生Responses隐藏无效深度思考开关，Chat服务保留开关和已保存偏好', async () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/features/settings/ui/services/ServiceConfiguration.vue'), 'utf8')
+    expect(source).toMatch(/<div v-if="showModelThinking"[^>]*data-testid="model-thinking-control"/u)
+    const userscriptSource = readFileSync(resolve(process.cwd(), 'userscript/SettingsPanel.vue'), 'utf8')
+    expect(userscriptSource).toMatch(/<label v-if="isAIService && usesModel && !nativeResponses"[^>]*><span>当前模型 Thinking/u)
+    expect(userscriptSource).toContain('const nativeResponses = computed(() => draft.value.service === services.openaiResponses)')
+    expect(userscriptSource).toContain('const {t} = useUiI18n()')
+    expect(userscriptSource).toContain("nativeResponses ? t('settings.services.responses.endpoint') : '代理地址（可选）'")
+    expect(userscriptSource.match(/v-model.trim="draft.proxy\[draft.service\]"/gu)).toHaveLength(1)
+    expect(userscriptSource).toContain("nativeResponses ? urls[services.openaiResponses] : '留空使用默认接口'")
+    expect(userscriptSource).toContain("t('settings.services.responses.endpointHelp')")
+    expect(userscriptSource).toContain("t('settings.services.responses.bodyHelp')")
+    expect(userscriptSource).toContain("nativeResponses ? responsesBodyExample : '可选：合并到请求体顶层'")
+    expect(userscriptSource).toContain('const responsesBodyExample = \'{"reasoning":{"effort":"low"}}\'')
+    expect(state.showModelThinking).toBe(true)
+    props.service = services.openaiResponses;props.selectedModelThinking = true;await settle()
+    expect(state.showModelThinking).toBe(false)
+    expect(props.selectedModelThinking).toBe(true)
+    props.service = services.openai;await settle()
+    expect(state.showModelThinking).toBe(true)
+    expect(props.selectedModelThinking).toBe(true)
+    props.compute.showModel = false;await settle()
+    expect(state.showModelThinking).toBe(false)
+  })
   it.each(['queue', 'save', 'response'])('单Key检查在%s的隐藏、缓存停用或卸载后立即收束且不写迟到结果', async phase => {
     for (const reason of ['hidden', 'cached', 'unmount']) {
       if (reason === 'cached') {props.active = true;await settle()}
@@ -103,6 +128,40 @@ describe('实际服务连接配置的活跃生命周期与确认归属', () => {
   it('配置对象替换即使指纹相同也取消旧检查，旧队列不得保存新对象', async () => {
     const waiting = pending();queue.mockReturnValueOnce(waiting.promise);const job = check();await settle();mutate('config');await settle()
     waiting.resolve();await job;expect(save).not.toHaveBeenCalled();expect(messages()).toHaveLength(0);expect(state.connectionTestBusy).toBe(false)
+  })
+  it.each([services.openaiResponses, services.openai, services.deepseek])('%s同值规范化广播和计数增量不取消在途检查或抹除成功', async service => {
+    props.service = service
+    props.config.apiKeys[service] = ['fixture-only'];props.config.token[service] = 'fixture-only'
+    Object.assign(props.config, normalizeConfig(props.config));await settle()
+    const delayed = pending();send.mockReturnValueOnce(delayed.promise)
+    const job = check();await settle()
+    expect(messages()).toHaveLength(1);expect(state.apiKeyChecks[0].status).toBe('checking')
+    const root = props.config
+    Object.assign(props.config, normalizeConfig({...props.config, count: props.config.count + 1}));await settle()
+    expect(props.config).toBe(root)
+    expect(state.connectionTestBusy).toBe(true)
+    expect(state.apiKeyChecks[0].status).toBe('checking')
+    delayed.resolve({success: true, durationMs: 17});await job;await settle()
+    expect(state.connectionTestState).toBe('success')
+    expect(state.apiKeyChecks[0]).toMatchObject({status: 'success', durationMs: 17})
+    Object.assign(props.config, normalizeConfig({...props.config, count: props.config.count + 1}));await settle()
+    expect(state.connectionTestState).toBe('success')
+    expect(state.apiKeyChecks[0]).toMatchObject({status: 'success', durationMs: 17})
+  })
+  it.each([services.openaiResponses, services.openai, services.deepseek])('%s实际代理、模型或密钥变化仍取消检查并拒绝迟到成功', async service => {
+    props.service = service
+    props.config.apiKeys[service] = ['fixture-only'];props.config.token[service] = 'fixture-only';await settle()
+    for (const field of ['proxy', 'model', 'key']) {
+      const delayed = pending();send.mockReturnValueOnce(delayed.promise)
+      const job = check();await settle();expect(state.apiKeyChecks[0].status).toBe('checking')
+      if (field === 'proxy') props.config.proxy[service] = 'https://changed.example.invalid/v1/responses'
+      if (field === 'model') props.config.model[service] = 'changed-fixture-model'
+      if (field === 'key') props.config.apiKeys[service] = ['changed-fixture-key']
+      await settle();expect(state.connectionTestBusy).toBe(false);expect(state.connectionTestState).toBe('idle')
+      expect(state.apiKeyChecks).toEqual({})
+      delayed.resolve({success: true, durationMs: 17});await job;await settle()
+      expect(state.connectionTestState).toBe('idle');expect(state.apiKeyChecks).toEqual({})
+    }
   })
   it('正常多Key检查按先保存后请求执行，停止后保留已完成结果并拒绝旧请求', async () => {
     const second = pending();send.mockResolvedValueOnce({success: true, durationMs: 7}).mockReturnValueOnce(second.promise)

@@ -2,7 +2,7 @@
  * @file src/services/translation/templates.ts
  *
  * 文件职责：构造不同大模型协议所需的请求消息和 payload，是翻译语义与 provider transport 之间的模板层。
- * 主要内容：生成 common、DeepSeek chat/responses、Gemini、Claude 和通义的文本或图像请求体，保持受信图片、识图提示词和冻结模型不被自定义 body 替换，每次只解析一次高级请求体，解析当前模型并转出页面摘要 prompt 构建器。 可核对的公开符号包括 commonMsgTemplate、getCurrentModel、deepseekResponsesMsgTemplate、deepseekMsgTemplate、geminiMsgTemplate、claudeMsgTemplate、tongyiMsgTemplate。
+ * 主要内容：生成 common、独立 OpenAI Responses、DeepSeek chat/responses、Gemini、Claude 和通义的文本或图像请求体；复用提示词与术语语义，保护受信图片和冻结模型，Responses 强制无存储流式请求并拒绝 Chat 请求体。
  * 模块边界：本文件位于翻译 application service 层，负责用例编排和端口契约；不挂载页面 UI，且不应把某家供应商的网络细节扩散到 feature，具体 HTTP 协议由 providers/platform 实现。
  */
 
@@ -228,6 +228,43 @@ export function commonMsgTemplate(
     return JSON.stringify(finalizeThinkingPayload(
         payload, current, service, model, 'openai-chat', thinkingOverride, preferenceModel,
     ))
+}
+
+/** 独立 Responses 服务只构造原生输入，不从 Chat messages 猜测会话语义。 */
+export function responsesMsgTemplate(
+    origin: string,
+    context?: string,
+    prompt?: string,
+    systemPrompt?: string,
+    serviceOverride?: string,
+    targetLanguage = config.to,
+    modelOverride?: string,
+    current: TranslationProviderConfigSnapshot = config,
+    _thinkingOverride?: boolean,
+    imageInput?: string,
+) {
+    const service = serviceOverride || current.service;
+    const model = currentConfiguredModel(current, service, modelOverride).replace(/（.*）/g, '');
+    const system = systemPrompt?.trim() || current.system_role[service] || defaultOption.system_role;
+    const user = buildUserPrompt(origin, context, prompt, service, targetLanguage, current);
+    const payload: Record<string, unknown> = {
+        model,
+        instructions: system,
+        input: [{role: 'user', content: imageInput
+            ? imageParts(imageInput, user, 'responses')
+            : [{type: 'input_text', text: user}]}],
+    };
+    // 图片事务沿用现有保护边界，不允许高级参数覆盖图片、识别提示词或冻结模型。
+    const custom = imageInput ? {} : parseCustomBody(currentCustomBody(current, service));
+    if (custom === undefined) throw new TypeError('请求体格式无效：高级请求体必须是 JSON 对象。');
+    if (Object.hasOwn(custom, 'messages')) {
+        throw new TypeError('请求体格式无效：Responses 不接受 messages，请改用 instructions 和数组 input。');
+    }
+    const result = {...payload, ...custom, stream: true, store: false};
+    for (const field of ['temperature', 'max_output_tokens', 'max_tokens', 'max_completion_tokens']) {
+        delete (result as Record<string, unknown>)[field];
+    }
+    return JSON.stringify(result);
 }
 
 // DeepSeek 消息模板。

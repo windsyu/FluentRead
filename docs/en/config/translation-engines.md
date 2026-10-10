@@ -8,6 +8,16 @@ FluentRead displays translations produced by your selected service. Use the defa
 
 <GuideVisual kind="provider" en />
 
+## Use openai responses
+
+Choose **openai responses** in **Settings → Translation services**, enter an API Key, select a model, and check the connection. This independent service uses the native Responses protocol. Existing OpenAI, New API, and custom services keep their current protocols and separate settings.
+
+Leave **Endpoint address** empty to use `https://api.openai.com/v1/responses`. For a self-hosted New API server, enter the root URL, a version URL such as `/v1`, or the complete `/responses` endpoint. Complete `/chat/completions` URLs are converted to `/responses` under the same prefix. Singular `/response` paths require correction; other exact custom paths are preserved.
+
+Requests always use `stream: true` and `store: false`. FluentRead collects the streamed reply before displaying the complete translation; it does not progressively update the UI. The `store: false` request parameter does not replace your server's data policy.
+
+Advanced custom bodies use Responses-native fields such as `reasoning`. `messages` is rejected; `temperature`, `max_output_tokens`, `max_tokens` and `max_completion_tokens` are removed. The fixed `stream` and `store` settings cannot be overridden. Invalid JSON bodies fail before a request is sent, rather than being ignored. This service currently supports text translation and connection checks, not reading assistants, writing assistants, or image recognition.
+
 <details class="guide-details">
 <summary>Configure a service</summary>
 
