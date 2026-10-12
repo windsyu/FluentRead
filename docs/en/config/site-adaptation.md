@@ -17,6 +17,8 @@ Discord's server icon rail stays unchanged in both reading-area and all-nodes mo
 
 In the browser extension, full-page translation also covers Disqus comments on OMG! Ubuntu articles and Markdown tutorial text in Kaggle Notebooks. Scroll down to translate later content.
 
+Google AI Edge Foresight embeds its article in a separate frame. The browser extension translates, restores, and retranslates that article together with the outer page, without requiring all-nodes recognition. This support is limited to its controlled article frame, not the embedded YouTube player or other third-party frames.
+
 ## Translate every time—or leave it alone
 
 Open **System & data → Website rules → Site preferences** to manage always-translate, disable-extension, and hide-floating-button preferences in one row per site. Host input is normalized to the root domain and includes its subdomains; paths and ports are not stored.

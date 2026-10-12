@@ -84,6 +84,8 @@ function verifySharedFrameEntrypoint(manifest, files, browser) {
     const entries = manifest.content_scripts ?? [];
     const shared = entries.filter(entry => entry.js?.includes('content-scripts/supportedFrame.js'));
     const expectedMatches = [
+        'https://developers-dot-devsite-v2-prod.appspot.com/edge/foresight/index_*.frame*',
+        'https://developers.google.com/frame/edge/foresight/index_*.frame*',
         'https://disqus.com/embed/comments/*',
         'https://mail.qq.com/cgi-bin/readmail*',
         'https://www.kaggleusercontent.com/kf/*/__results__.html*',

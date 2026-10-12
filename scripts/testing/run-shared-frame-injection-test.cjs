@@ -33,6 +33,10 @@ const fixtures = [
     {name: 'qq-mail', top: 'https://mail.qq.com/cgi-bin/frame_html?fixture=1', child: 'https://mail.qq.com/cgi-bin/readmail?fixture=1'},
     {name: 'disqus', top: 'https://disqus.com/fixture-top', child: 'https://disqus.com/embed/comments/fixture'},
     {name: 'kaggle', top: 'https://www.kaggleusercontent.com/kf/fixture-top', child: 'https://www.kaggleusercontent.com/kf/42/__results__.html'},
+    {name: 'foresight-devsite', top: 'https://developers.google.com/edge/foresight',
+        child: `https://developers.google.com/frame/edge/foresight/index_${'a'.repeat(64)}.frame`},
+    {name: 'foresight-appspot', top: 'https://developers.google.com/edge/foresight',
+        child: `https://developers-dot-devsite-v2-prod.appspot.com/edge/foresight/index_${'b'.repeat(64)}.frame`},
 ];
 let launched;
 let launchAttempted = false;
